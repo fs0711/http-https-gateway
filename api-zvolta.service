@@ -1,16 +1,14 @@
 [Unit]
 Description=Flask HTTP to HTTPS Proxy Server
 After=network.target
-Documentation=https://github.com/fs0711/http-https-gateway
 
 [Service]
-Type=notify
 User=root
 Group=www-data
 
 WorkingDirectory=/home/gateway
 Environment="PATH=/home/gateway/env/bin"
-ExecStart=/home/gateway/env/bin/gunicorn --config gunicorn.conf.py wsgi:app
+ExecStart=/home/gateway/env/bin/gunicorn --config gunicorn.ini wsgi:app
 
 # Restart policy
 Restart=always
