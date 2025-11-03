@@ -33,20 +33,43 @@ sudo -u proxy python3 -m venv venv
 sudo -u proxy ./venv/bin/pip install -r requirements.txt
 ```
 
-### 5. Generate SSL Certificates
+### 5. Setup Let's Encrypt Certificates
+
+For production, use Let's Encrypt instead of self-signed certificates:
+
 ```bash
-sudo mkdir -p /opt/proxy/certs
-cd /opt/proxy/certs
+# Install certbot
+sudo apt-get install certbot python3-certbot-nginx
 
-# Generate self-signed certificate
-sudo openssl req -x509 -newkey rsa:2048 -nodes \
-    -out server.crt -keyout server.key \
-    -days 365 -subj "/CN=proxy.local"
+# Get certificates for both domains
+sudo certbot certonly --nginx \
+    -d smartswitch.orkofleet.com \
+    -d api.zvolta.com \
+    --email your-email@example.com \
+    --agree-tos
 
-# Set proper permissions
-sudo chown proxy:proxy server.crt server.key
-sudo chmod 600 server.key
-sudo chmod 644 server.crt
+# Allow proxy user to read Let's Encrypt certs
+sudo usermod -aG root proxy
+sudo chmod 755 /etc/letsencrypt/{live,archive}
+sudo chmod 644 /etc/letsencrypt/live/*/fullchain.pem
+sudo chmod 600 /etc/letsencrypt/live/*/privkey.pem
+
+# Create renewal hook to restart proxy
+sudo mkdir -p /etc/letsencrypt/renewal-hooks/post
+sudo tee /etc/letsencrypt/renewal-hooks/post/proxy-restart.sh > /dev/null <<'EOF'
+#!/bin/bash
+systemctl restart proxy
+EOF
+
+sudo chmod +x /etc/letsencrypt/renewal-hooks/post/proxy-restart.sh
+
+# For development (self-signed), use this instead:
+# sudo mkdir -p /opt/proxy/certs
+# sudo openssl req -x509 -newkey rsa:2048 -nodes \
+#     -out /opt/proxy/certs/server.crt -keyout /opt/proxy/certs/server.key \
+#     -days 365 -subj "/CN=localhost"
+# sudo chown proxy:proxy /opt/proxy/certs/*
+# sudo chmod 600 /opt/proxy/certs/server.key
 ```
 
 ### 6. Copy Service File

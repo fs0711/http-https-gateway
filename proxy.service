@@ -9,16 +9,16 @@ User=proxy
 Group=proxy
 WorkingDirectory=/opt/proxy
 
-# Environment variables
+# Environment variables for Let's Encrypt SSL certificates
 Environment="FLASK_ENV=production"
 Environment="FLASK_DEBUG=False"
 Environment="GATEWAY_HOST=0.0.0.0"
 Environment="GATEWAY_PORT=5443"
 Environment="SSL_ENABLED=True"
-Environment="SSL_CERT_PATH=/opt/proxy/certs/server.crt"
-Environment="SSL_KEY_PATH=/opt/proxy/certs/server.key"
+Environment="SSL_CERT_PATH=/etc/letsencrypt/live/smartswitch.orkofleet.com/fullchain.pem"
+Environment="SSL_KEY_PATH=/etc/letsencrypt/live/smartswitch.orkofleet.com/privkey.pem"
 Environment="PROXY_ENDPOINT_A=https://smartswitch.orkofleet.com"
-Environment="PROXY_ENDPOINT_B=http://api.zvolta.com"
+Environment="PROXY_ENDPOINT_B=https://api.zvolta.com"
 Environment="PROXY_TIMEOUT=30"
 Environment="LOG_LEVEL=INFO"
 Environment="LOG_FILE=/var/log/proxy/gateway.log"

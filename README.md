@@ -4,52 +4,113 @@ A simple, fast bidirectional proxy that forwards requests between two endpoints 
 
 ## Features
 
-- ✅ Bidirectional proxying
-- ✅ Mixed HTTP/HTTPS protocol support
-- ✅ Generic endpoint forwarding
-- ✅ All HTTP methods (GET, POST, PUT, DELETE, PATCH)
-- ✅ SSL/TLS with self-signed certificates
-- ✅ Simple configuration via `.env`
-- ✅ Request logging
+- ✅ **Bidirectional proxying** - Request routing between endpoints
+- ✅ **Mixed HTTPS/HTTP support** - Protocol conversion
+- ✅ **Let's Encrypt SSL** - Free, automatic certificate renewal
+- ✅ **All HTTP methods** - GET, POST, PUT, DELETE, PATCH
+- ✅ **NGINX reverse proxy** - Industry-standard web server
+- ✅ **Systemd service** - Production-ready deployment
+- ✅ **Request logging** - Comprehensive access and error logs
+- ✅ **Security headers** - HSTS, CSP, X-Frame-Options, etc.
 
-## Setup
+## Quick Start
+
+### Local Development
 
 ```bash
 # Install dependencies
 pip install -r requirements.txt
 
-# Generate SSL certificates
+# For development (with self-signed certificates):
 mkdir -p certs
 openssl req -x509 -newkey rsa:2048 -nodes -out certs/server.crt -keyout certs/server.key -days 365 -subj "/CN=localhost"
 
-# Run
+# Run locally
 python app.py
 ```
 
-## Configuration (`.env`)
+### Production Deployment
+
+See [PRODUCTION_DEPLOYMENT.md](PRODUCTION_DEPLOYMENT.md) for complete production setup with Let's Encrypt.
+
+Quick summary:
+```bash
+# 1. Get Let's Encrypt certificates
+sudo certbot certonly --nginx -d smartswitch.orkofleet.com -d api.zvolta.com
+
+# 2. Deploy with systemd
+sudo bash setup-letsencrypt.sh
+
+# 3. Configure NGINX
+sudo cp nginx-letsencrypt.conf /etc/nginx/sites-available/proxy
+```
+
+## Configuration
+
+### Environment Variables (`.env`)
 
 ```env
-FLASK_ENV=development
-GATEWAY_HOST=0.0.0.0
-GATEWAY_PORT=5443
-SSL_ENABLED=True
+# Flask settings
+FLASK_ENV=production              # development, testing, production
+FLASK_DEBUG=False                 # Enable Flask debug mode
+GATEWAY_HOST=0.0.0.0              # Bind address
+GATEWAY_PORT=5443                 # Port to listen on
+
+# SSL/TLS with Let's Encrypt
+SSL_ENABLED=True                  # Enable SSL
+SSL_CERT_PATH=/etc/letsencrypt/live/smartswitch.orkofleet.com/fullchain.pem
+SSL_KEY_PATH=/etc/letsencrypt/live/smartswitch.orkofleet.com/privkey.pem
+
+# Proxy endpoints
 PROXY_ENDPOINT_A=https://smartswitch.orkofleet.com
-PROXY_ENDPOINT_B=http://api.zvolta.com
-PROXY_TIMEOUT=30
-LOG_LEVEL=INFO
-LOG_FILE=./logs/gateway.log
+PROXY_ENDPOINT_B=https://api.zvolta.com
+PROXY_TIMEOUT=30                  # Request timeout in seconds
+
+# Logging
+LOG_LEVEL=INFO                    # DEBUG, INFO, WARNING, ERROR, CRITICAL
+LOG_FILE=/var/log/proxy/gateway.log
 ```
 
 ## How It Works
 
-**Request routing:**
-- `https://smartswitch.orkofleet.com/any/endpoint` → `http://api.zvolta.com/any/endpoint`
-- `http://api.zvolta.com/any/endpoint` → `https://smartswitch.orkofleet.com/any/endpoint`
+```
+Client Request to smartswitch.orkofleet.com
+        ↓
+   NGINX (Port 443)
+        ↓
+   Flask App (Port 5443)
+        ↓
+Proxy to api.zvolta.com
+        ↓
+Response back through Flask + NGINX
+```
 
-**Protocol handling:**
-- HTTPS requests get SSL verification
-- HTTP requests skip SSL verification
-- Automatic protocol conversion
+## SSL/TLS with Let's Encrypt
+
+### Automatic Certificate Renewal
+
+Certificates are automatically renewed 30 days before expiration:
+
+```bash
+# Check renewal status
+sudo certbot certificates
+
+# Renew manually (if needed)
+sudo certbot renew
+
+# Monitor renewal logs
+sudo tail -f /var/log/letsencrypt/letsencrypt.log
+```
+
+### Certificate Details
+
+```bash
+# View certificate
+sudo openssl x509 -in /etc/letsencrypt/live/smartswitch.orkofleet.com/cert.pem -text -noout
+
+# Check expiration
+sudo openssl x509 -in /etc/letsencrypt/live/smartswitch.orkofleet.com/cert.pem -noout -dates
+```
 
 ## Testing
 

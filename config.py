@@ -24,10 +24,11 @@ class Config:
 
     # SSL/TLS settings
     SSL_ENABLED = os.getenv("SSL_ENABLED", "True").lower() == "true"
-    SSL_CERT_PATH = os.getenv("SSL_CERT_PATH", "./certs/server.crt")
-    SSL_KEY_PATH = os.getenv("SSL_KEY_PATH", "./certs/server.key")
+    # Let's Encrypt certificate paths (production) or self-signed (development)
+    SSL_CERT_PATH = os.getenv("SSL_CERT_PATH", "/etc/letsencrypt/live/smartswitch.orkofleet.com/fullchain.pem")
+    SSL_KEY_PATH = os.getenv("SSL_KEY_PATH", "/etc/letsencrypt/live/smartswitch.orkofleet.com/privkey.pem")
     SSL_VERIFY_CLIENT = os.getenv("SSL_VERIFY_CLIENT", "False").lower() == "true"
-    SSL_CA_PATH = os.getenv("SSL_CA_PATH", "./certs/ca.crt")
+    SSL_CA_PATH = os.getenv("SSL_CA_PATH", "/etc/letsencrypt/live/smartswitch.orkofleet.com/chain.pem")
 
     # Bidirectional Proxy Configuration (from .env only)
     PROXY_ENDPOINT_A = os.getenv("PROXY_ENDPOINT_A")
