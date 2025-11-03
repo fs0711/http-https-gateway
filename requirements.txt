@@ -1,3 +1,27 @@
-﻿Flask==3.0.0
-requests==2.31.0
-python-dotenv==1.0.0
+# Flask HTTP to HTTPS Proxy Server Requirements
+# Python 3.8+ recommended
+
+# Core Framework
+Flask==3.0.3
+
+# HTTP Client Library
+requests==2.32.3
+
+# WSGI HTTP Server (for production deployment)
+gunicorn==22.0.0
+
+# Environment variable management
+python-dotenv==1.0.1
+
+# WSGI utilities (included with Flask but explicit for clarity)
+Werkzeug==3.0.3
+
+# Security - for SSL certificate handling
+certifi==2024.8.30
+urllib3==2.2.3
+
+# Additional utilities
+click==8.1.7
+itsdangerous==2.2.0
+Jinja2==3.1.4
+MarkupSafe==2.1.5

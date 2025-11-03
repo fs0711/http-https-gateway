@@ -18,21 +18,20 @@ class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
 
     # Server settings
-    HOST = os.getenv("GATEWAY_HOST", "0.0.0.0")
-    PORT = int(os.getenv("GATEWAY_PORT", "5443"))
+    HOST = os.getenv("GATEWAY_HOST", "127.0.0.1")
+    PORT = int(os.getenv("GATEWAY_PORT", "5011"))  # Running behind nginx reverse proxy
     WORKERS = int(os.getenv("GATEWAY_WORKERS", "4"))
 
-    # SSL/TLS settings
-    SSL_ENABLED = os.getenv("SSL_ENABLED", "True").lower() == "true"
-    # Let's Encrypt certificate paths (production) or self-signed (development)
-    SSL_CERT_PATH = os.getenv("SSL_CERT_PATH", "/etc/letsencrypt/live/smartswitch.orkofleet.com/fullchain.pem")
-    SSL_KEY_PATH = os.getenv("SSL_KEY_PATH", "/etc/letsencrypt/live/smartswitch.orkofleet.com/privkey.pem")
+    # SSL/TLS settings (optional for the proxy server itself)
+    SSL_ENABLED = os.getenv("SSL_ENABLED", "False").lower() == "true"
+    # Let's Encrypt certificate paths (if you want to enable HTTPS on the proxy)
+    SSL_CERT_PATH = os.getenv("SSL_CERT_PATH", "/etc/letsencrypt/live/api.zvolta.com/fullchain.pem")
+    SSL_KEY_PATH = os.getenv("SSL_KEY_PATH", "/etc/letsencrypt/live/api.zvolta.com/privkey.pem")
     SSL_VERIFY_CLIENT = os.getenv("SSL_VERIFY_CLIENT", "False").lower() == "true"
-    SSL_CA_PATH = os.getenv("SSL_CA_PATH", "/etc/letsencrypt/live/smartswitch.orkofleet.com/chain.pem")
+    SSL_CA_PATH = os.getenv("SSL_CA_PATH", "/etc/letsencrypt/live/api.zvolta.com/chain.pem")
 
-    # Bidirectional Proxy Configuration (from .env only)
-    PROXY_ENDPOINT_A = os.getenv("PROXY_ENDPOINT_A")
-    PROXY_ENDPOINT_B = os.getenv("PROXY_ENDPOINT_B")
+    # Proxy Configuration
+    TARGET_HOST = os.getenv("TARGET_HOST", "https://smartswitch.orkofleet.com")
     PROXY_TIMEOUT = int(os.getenv("PROXY_TIMEOUT", "30"))
 
     # Logging settings
@@ -53,16 +52,16 @@ class Config:
         """
         errors = []
 
-        # Check SSL certificates exist
+        # Check SSL certificates exist (if SSL is enabled for the proxy server)
         if cls.SSL_ENABLED:
             if not os.path.exists(cls.SSL_CERT_PATH):
                 errors.append(f"SSL certificate not found: {cls.SSL_CERT_PATH}")
             if not os.path.exists(cls.SSL_KEY_PATH):
                 errors.append(f"SSL key not found: {cls.SSL_KEY_PATH}")
 
-        # Check proxy endpoints are configured
-        if not cls.PROXY_ENDPOINT_A or not cls.PROXY_ENDPOINT_B:
-            errors.append("Both PROXY_ENDPOINT_A and PROXY_ENDPOINT_B must be configured")
+        # Check target host is configured
+        if not cls.TARGET_HOST:
+            errors.append("TARGET_HOST must be configured")
 
         # Check log directory exists or can be created
         log_dir = os.path.dirname(cls.LOG_FILE)

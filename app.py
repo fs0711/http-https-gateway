@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response
 from config import Config
 import requests
 import logging
@@ -10,67 +10,91 @@ config = Config()
 logging.basicConfig(level=config.LOG_LEVEL)
 logger = logging.getLogger(__name__)
 
-def get_target_url(source_url):
-    """Determine target endpoint based on source"""
-    if config.PROXY_ENDPOINT_A in source_url:
-        return config.PROXY_ENDPOINT_B
-    elif config.PROXY_ENDPOINT_B in source_url:
-        return config.PROXY_ENDPOINT_A
-    else:
-        return config.PROXY_ENDPOINT_B
+# Target proxy configuration
+TARGET_HOST = "https://smartswitch.orkofleet.com"
 
-def should_verify_ssl(target_url):
-    """Determine if SSL verification is needed based on target URL"""
-    return target_url.startswith("https://")
-
-def proxy_request(endpoint_path, method="POST"):
-    """Generic proxy request handler with mixed protocol support"""
+def proxy_request(endpoint_path, method="GET"):
+    """
+    Proxy requests from api.zvolta.com to smartswitch.orkofleet.com
+    Forwards all headers, query params, and body data
+    """
     try:
-        referer = request.headers.get('Referer', '')
-        target_base = get_target_url(referer)
-        target_url = f"{target_base}{endpoint_path}"
+        # Build target URL
+        target_url = f"{TARGET_HOST}{endpoint_path}"
         
-        # Determine if SSL verification is needed
-        verify_ssl = should_verify_ssl(target_url)
+        # Get query parameters
+        query_params = request.args.to_dict()
         
+        # Get request body
         data = None
+        json_data = None
         if request.is_json:
-            data = request.get_json()
+            json_data = request.get_json()
         elif request.data:
             data = request.data
         
-        headers = {k: v for k, v in request.headers if k.lower() not in ['host', 'connection']}
+        # Forward headers (exclude hop-by-hop headers)
+        excluded_headers = ['host', 'connection', 'keep-alive', 'proxy-authenticate', 
+                           'proxy-authorization', 'te', 'trailers', 'transfer-encoding', 'upgrade']
+        headers = {k: v for k, v in request.headers if k.lower() not in excluded_headers}
         
-        logger.info(f"Proxying {method} request to {target_url} (SSL verify: {verify_ssl})")
+        logger.info(f"Proxying {method} request: {request.url} -> {target_url}")
         
+        # Make the request to target server
         response = requests.request(
             method=method,
             url=target_url,
-            json=data if isinstance(data, dict) else None,
-            data=data if isinstance(data, str) else None,
+            params=query_params,
+            json=json_data,
+            data=data,
             headers=headers,
             timeout=config.PROXY_TIMEOUT,
-            verify=verify_ssl  # Use intelligent SSL verification
+            verify=True,  # Verify SSL for HTTPS target
+            allow_redirects=False  # Don't follow redirects automatically
         )
         
-        return jsonify(response.json() if response.headers.get('content-type') == 'application/json' else response.text), response.status_code
+        # Prepare response headers (exclude hop-by-hop headers)
+        response_headers = [(k, v) for k, v in response.headers.items() 
+                           if k.lower() not in excluded_headers]
+        
+        logger.info(f"Response from {target_url}: {response.status_code}")
+        
+        # Return response with same status code, headers, and body
+        return Response(
+            response.content,
+            status=response.status_code,
+            headers=response_headers
+        )
+    
+    except requests.exceptions.Timeout:
+        logger.error(f"Timeout error for {target_url}")
+        return jsonify({'error': 'Request timeout', 'success': False}), 504
+    
+    except requests.exceptions.ConnectionError as e:
+        logger.error(f"Connection error for {target_url}: {str(e)}")
+        return jsonify({'error': 'Connection failed to target server', 'success': False}), 502
     
     except Exception as e:
-        logger.error(f"Proxy error: {str(e)}")
+        logger.error(f"Proxy error for {target_url}: {str(e)}")
         return jsonify({'error': str(e), 'success': False}), 500
 
 @app.route('/health', methods=['GET'])
 def health():
-    return jsonify({'status': 'ok', 'proxy': f"{config.PROXY_ENDPOINT_A} <-> {config.PROXY_ENDPOINT_B}"}), 200
+    """Health check endpoint"""
+    return jsonify({
+        'status': 'ok', 
+        'proxy': f"api.zvolta.com -> {TARGET_HOST}",
+        'version': '1.0'
+    }), 200
 
-@app.route('/', defaults={'path': ''}, methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH'])
-@app.route('/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH'])
+@app.route('/', defaults={'path': ''}, methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'])
+@app.route('/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'])
 def proxy(path):
-    """Catch-all proxy endpoint"""
+    """Catch-all proxy endpoint - forwards all requests to target"""
     endpoint = f"/{path}" if path else "/"
     method = request.method
     
-    logger.info(f"Received {method} {endpoint}")
+    logger.debug(f"Received {method} request for {endpoint}")
     return proxy_request(endpoint, method)
 
 if __name__ == '__main__':
