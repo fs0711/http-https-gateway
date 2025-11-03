@@ -98,9 +98,9 @@ def proxy(path):
     return proxy_request(endpoint, method)
 
 if __name__ == '__main__':
-    logger.info(f"Starting bidirectional proxy")
-    logger.info(f"Endpoint A: {config.PROXY_ENDPOINT_A}")
-    logger.info(f"Endpoint B: {config.PROXY_ENDPOINT_B}")
+    logger.info(f"Starting Flask proxy server")
+    logger.info(f"Target host: {TARGET_HOST}")
+    logger.info(f"Listening on {config.HOST}:{config.PORT}")
     
     if config.SSL_ENABLED:
         app.run(
