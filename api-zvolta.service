@@ -1,5 +1,5 @@
 [Unit]
-Description=Flask HTTP to HTTPS Proxy Server
+Description=Gunicorn instance to serve api zvolta
 After=network.target
 
 [Service]
@@ -8,28 +8,7 @@ Group=www-data
 
 WorkingDirectory=/home/gateway
 Environment="PATH=/home/gateway/env/bin"
-ExecStart=/home/gateway/env/bin/gunicorn --config gunicorn.ini wsgi:app
-
-# Restart policy
-Restart=always
-RestartSec=10
-StartLimitInterval=200
-StartLimitBurst=5
-
-# Process management
-KillMode=mixed
-TimeoutStopSec=30
-
-# Security settings
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/home/gateway/logs
-
-# Resource limits
-LimitNOFILE=65536
-LimitNPROC=4096
+ExecStart=/home/gateway/env/bin/gunicorn --config gunicorn.conf.py wsgi:app
 
 [Install]
 WantedBy=multi-user.target
