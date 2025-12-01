@@ -239,18 +239,32 @@ def view_logs():
                 padding: 40px;
                 font-size: 1.2em;
             }
-            .refresh-btn {
-                background-color: #4CAF50;
-                color: white;
+            .btn {
                 padding: 10px 20px;
                 border: none;
                 border-radius: 4px;
                 cursor: pointer;
                 font-size: 16px;
-                margin-bottom: 20px;
+                margin-right: 10px;
+            }
+            .refresh-btn {
+                background-color: #4CAF50;
+                color: white;
             }
             .refresh-btn:hover {
                 background-color: #45a049;
+            }
+            .delete-btn {
+                background-color: #f44336;
+                color: white;
+            }
+            .delete-btn:hover {
+                background-color: #da190b;
+            }
+            .button-group {
+                display: flex;
+                gap: 10px;
+                margin-bottom: 20px;
             }
             .meta-info {
                 color: #666;
@@ -271,7 +285,10 @@ def view_logs():
                 <strong>Target Host:</strong> {{ target_host }}
             </div>
             
-            <button class="refresh-btn" onclick="location.reload()">🔄 Refresh Logs</button>
+            <div class="button-group">
+                <button class="btn refresh-btn" onclick="location.reload()">🔄 Refresh Logs</button>
+                <button class="btn delete-btn" onclick="deleteLogs()">🗑️ Delete All Logs</button>
+            </div>
             
             {% if logs %}
                 {% for log in logs %}
@@ -302,6 +319,31 @@ def view_logs():
                 </div>
             {% endif %}
         </div>
+        
+        <script>
+            function deleteLogs() {
+                if (confirm('⚠️ Are you sure you want to delete ALL logged requests?\n\nThis action cannot be undone!')) {
+                    fetch('/log/delete', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            alert('✅ All logs have been deleted successfully!');
+                            location.reload();
+                        } else {
+                            alert('❌ Error deleting logs: ' + data.error);
+                        }
+                    })
+                    .catch(error => {
+                        alert('❌ Error: ' + error);
+                    });
+                }
+            }
+        </script>
     </body>
     </html>
     '''
@@ -361,6 +403,25 @@ def view_logs():
         total_logs=total_logs,
         target_host=TARGET_HOST
     )
+
+@app.route('/log/delete', methods=['POST'])
+def delete_logs():
+    """Delete all POST request logs"""
+    try:
+        with db_lock:
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute('DELETE FROM post_logs')
+            deleted_count = cursor.rowcount
+            conn.commit()
+            conn.close()
+        
+        logger.info(f"Deleted {deleted_count} log entries")
+        return jsonify({'success': True, 'deleted_count': deleted_count}), 200
+    
+    except Exception as e:
+        logger.error(f"Error deleting logs: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/health', methods=['GET'])
 def health():
