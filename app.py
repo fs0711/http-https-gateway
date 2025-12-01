@@ -322,7 +322,7 @@ def view_logs():
         
         <script>
             function deleteLogs() {
-                if (confirm('⚠️ Are you sure you want to delete ALL logged requests?\n\nThis action cannot be undone!')) {
+                if (confirm('Are you sure you want to delete ALL logged requests?\\n\\nThis action cannot be undone!')) {
                     fetch('/log/delete', {
                         method: 'POST',
                         headers: {
@@ -332,14 +332,14 @@ def view_logs():
                     .then(response => response.json())
                     .then(data => {
                         if (data.success) {
-                            alert('✅ All logs have been deleted successfully!');
+                            alert('All logs have been deleted successfully!');
                             location.reload();
                         } else {
-                            alert('❌ Error deleting logs: ' + data.error);
+                            alert('Error deleting logs: ' + data.error);
                         }
                     })
                     .catch(error => {
-                        alert('❌ Error: ' + error);
+                        alert('Error: ' + error);
                     });
                 }
             }
