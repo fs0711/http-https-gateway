@@ -69,6 +69,8 @@ certs/*.key
 certs/*.csr
 logs/*.log
 logs/*.log.*
+logs/*.db
+logs/*.db-journal
 *.log
 
 # OS

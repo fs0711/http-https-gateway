@@ -3,8 +3,10 @@ from config import Config
 import requests
 import logging
 from datetime import datetime
-from collections import deque
 import json
+import sqlite3
+import threading
+import os
 
 app = Flask(__name__)
 config = Config()
@@ -16,21 +18,73 @@ logger = logging.getLogger(__name__)
 # Target proxy configuration
 TARGET_HOST = "https://smartswitch.orkofleet.com"
 
-# In-memory storage for POST request logs (max 1000 entries)
-post_request_logs = deque(maxlen=1000)
+# SQLite database for persistent log storage
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs', 'post_requests.db')
+db_lock = threading.Lock()
+
+def init_db():
+    """Initialize SQLite database for storing POST request logs"""
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS post_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT NOT NULL,
+            endpoint TEXT NOT NULL,
+            payload TEXT,
+            headers TEXT NOT NULL,
+            remote_addr TEXT,
+            user_agent TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    # Create index for faster queries
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_timestamp ON post_logs(timestamp DESC)')
+    conn.commit()
+    conn.close()
+
+def cleanup_old_logs():
+    """Keep only the most recent 1000 log entries"""
+    with db_lock:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute('''
+            DELETE FROM post_logs 
+            WHERE id NOT IN (
+                SELECT id FROM post_logs 
+                ORDER BY id DESC 
+                LIMIT 1000
+            )
+        ''')
+        conn.commit()
+        conn.close()
 
 def log_post_request(endpoint_path, payload, headers):
-    """Log POST request details"""
-    log_entry = {
-        'timestamp': datetime.now().isoformat(),
-        'endpoint': endpoint_path,
-        'payload': payload,
-        'headers': dict(headers),
-        'remote_addr': request.remote_addr,
-        'user_agent': request.headers.get('User-Agent', 'Unknown')
-    }
-    post_request_logs.append(log_entry)
-    logger.info(f"Logged POST request to {endpoint_path}")
+    """Log POST request details to SQLite database"""
+    try:
+        timestamp = datetime.now().isoformat()
+        payload_str = json.dumps(payload) if isinstance(payload, (dict, list)) else str(payload) if payload else None
+        headers_str = json.dumps(dict(headers))
+        remote_addr = request.remote_addr
+        user_agent = request.headers.get('User-Agent', 'Unknown')
+        
+        with db_lock:
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO post_logs (timestamp, endpoint, payload, headers, remote_addr, user_agent)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (timestamp, endpoint_path, payload_str, headers_str, remote_addr, user_agent))
+            conn.commit()
+            conn.close()
+        
+        # Cleanup old logs asynchronously to maintain 1000 entry limit
+        threading.Thread(target=cleanup_old_logs, daemon=True).start()
+        
+        logger.info(f"Logged POST request to {endpoint_path}")
+    except Exception as e:
+        logger.error(f"Failed to log POST request: {str(e)}")
 
 def proxy_request(endpoint_path, method="GET"):
     """
@@ -252,34 +306,59 @@ def view_logs():
     </html>
     '''
     
-    # Prepare logs for display (reverse to show newest first)
+    # Fetch logs from SQLite database (newest first)
     logs_for_display = []
-    for log in reversed(post_request_logs):
-        # Format payload for display
-        payload = log['payload']
-        if isinstance(payload, dict) or isinstance(payload, list):
-            payload_formatted = json.dumps(payload, indent=2, ensure_ascii=False)
-        elif payload is not None:
-            payload_formatted = str(payload)
-        else:
-            payload_formatted = "(empty)"
+    total_logs = 0
+    
+    try:
+        with db_lock:
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT timestamp, endpoint, payload, headers, remote_addr, user_agent
+                FROM post_logs
+                ORDER BY id DESC
+                LIMIT 1000
+            ''')
+            rows = cursor.fetchall()
+            total_logs = cursor.execute('SELECT COUNT(*) FROM post_logs').fetchone()[0]
+            conn.close()
         
-        # Format headers
-        headers_formatted = json.dumps(log['headers'], indent=2, ensure_ascii=False)
-        
-        logs_for_display.append({
-            'timestamp': log['timestamp'],
-            'endpoint': log['endpoint'],
-            'payload_formatted': payload_formatted,
-            'headers_formatted': headers_formatted,
-            'remote_addr': log['remote_addr'],
-            'user_agent': log['user_agent']
-        })
+        for row in rows:
+            timestamp, endpoint, payload_str, headers_str, remote_addr, user_agent = row
+            
+            # Parse and format payload
+            try:
+                payload = json.loads(payload_str) if payload_str else None
+                if isinstance(payload, (dict, list)):
+                    payload_formatted = json.dumps(payload, indent=2, ensure_ascii=False)
+                else:
+                    payload_formatted = str(payload) if payload else "(empty)"
+            except:
+                payload_formatted = payload_str if payload_str else "(empty)"
+            
+            # Parse and format headers
+            try:
+                headers = json.loads(headers_str)
+                headers_formatted = json.dumps(headers, indent=2, ensure_ascii=False)
+            except:
+                headers_formatted = headers_str
+            
+            logs_for_display.append({
+                'timestamp': timestamp,
+                'endpoint': endpoint,
+                'payload_formatted': payload_formatted,
+                'headers_formatted': headers_formatted,
+                'remote_addr': remote_addr or 'Unknown',
+                'user_agent': user_agent or 'Unknown'
+            })
+    except Exception as e:
+        logger.error(f"Error fetching logs: {str(e)}")
     
     return render_template_string(
         html_template,
         logs=logs_for_display,
-        total_logs=len(post_request_logs),
+        total_logs=total_logs,
         target_host=TARGET_HOST
     )
 
@@ -301,6 +380,9 @@ def proxy(path):
     
     logger.debug(f"Received {method} request for {endpoint}")
     return proxy_request(endpoint, method)
+
+# Initialize database on app startup
+init_db()
 
 if __name__ == '__main__':
     logger.info(f"Starting Flask proxy server")
